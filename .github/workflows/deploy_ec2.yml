@@ -22,6 +22,25 @@ jobs:
         working-directory: terraform
         run: terraform init -reconfigure
       
+      - name: Import existing SG if it already exists
+        working-directory: terraform
+        run: |
+          set +e
+          terraform state show aws_security_group.ec2_sg >/dev/null 2>&1
+          IN_STATE=$?
+          set -e
+
+          if [ "$IN_STATE" -ne 0 ]; then
+            SG_ID=$(aws ec2 describe-security-groups \
+              --filters Name=vpc-id,Values=vpc-0d83e07e3204fefdd Name=group-name,Values=golden-ami-sg \
+              --query "SecurityGroups[0].GroupId" --output text)
+
+            if [ "$SG_ID" != "None" ] && [ -n "$SG_ID" ]; then
+              echo "Importing existing SG: $SG_ID"
+              terraform import aws_security_group.ec2_sg "$SG_ID"
+            fi
+          fi
+      
       - name: Terraform Apply
         working-directory: terraform
         run: terraform apply -auto-approve
